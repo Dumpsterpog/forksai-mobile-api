@@ -5,6 +5,8 @@ import admin from "firebase-admin";
    ROBUST PARSER (same version as in pdfToFlashcards.js)
 ------------------------------------------------------------------- */
 function robustParseFlashcards(rawText) {
+  console.log("🟡 RAW GEMINI OUTPUT (first 500 chars):", rawText.slice(0, 500));
+
   let s = (rawText || "")
     .replace(/```(?:json)?/gi, "")
     .replace(/```/g, "")
@@ -25,12 +27,18 @@ function robustParseFlashcards(rawText) {
 
   // Fast parse
   let parsed = tryParse(s);
-  if (parsed) return parsed;
+  if (parsed) {
+    console.log("🟢 PARSED JSON (fast path):", parsed);
+    return parsed;
+  }
 
   // Escape bad backslashes
   let attempt = s.replace(/\\(?!["\\\/bfnrtu])/g, "\\\\");
   parsed = tryParse(attempt);
-  if (parsed) return parsed;
+  if (parsed) {
+    console.log("🟢 PARSED AFTER ESCAPING SLASHES:", parsed);
+    return parsed;
+  }
 
   // Extract array/object substring
   const findJSON = (str, open, close) => {
@@ -44,17 +52,26 @@ function robustParseFlashcards(rawText) {
     findJSON(attempt, "[", "]") || findJSON(attempt, "{", "}");
   if (extracted) {
     parsed = tryParse(extracted);
-    if (parsed) return parsed;
+    if (parsed) {
+      console.log("🟢 PARSED JSON (substring extraction):", parsed);
+      return parsed;
+    }
 
     extracted = extracted.replace(/\\(?!["\\\/bfnrtu])/g, "\\\\");
     parsed = tryParse(extracted);
-    if (parsed) return parsed;
+    if (parsed) {
+      console.log("🟢 PARSED JSON (substring + escape):", parsed);
+      return parsed;
+    }
   }
 
   // Fix trailing commas
   attempt = attempt.replace(/,(\s*[}\]])/g, "$1");
   parsed = tryParse(attempt);
-  if (parsed) return parsed;
+  if (parsed) {
+    console.log("🟢 PARSED AFTER TRAILING COMMA FIX:", parsed);
+    return parsed;
+  }
 
   // Fix unquoted keys
   attempt = attempt.replace(
@@ -62,17 +79,26 @@ function robustParseFlashcards(rawText) {
     '$1"$2":'
   );
   parsed = tryParse(attempt);
-  if (parsed) return parsed;
+  if (parsed) {
+    console.log("🟢 PARSED AFTER QUOTING KEYS:", parsed);
+    return parsed;
+  }
 
   // Fix single quoted strings
   attempt = attempt.replace(/'([^']*)'/g, (_, x) => `"${x.replace(/"/g, '\\"')}"`);
   parsed = tryParse(attempt);
-  if (parsed) return parsed;
+  if (parsed) {
+    console.log("🟢 PARSED AFTER FIXING SINGLE QUOTES:", parsed);
+    return parsed;
+  }
 
   // Fully escape
   attempt = attempt.replace(/\\/g, "\\\\");
   parsed = tryParse(attempt);
-  if (parsed) return parsed;
+  if (parsed) {
+    console.log("🟢 PARSED AFTER FULL ESCAPE:", parsed);
+    return parsed;
+  }
 
   // Q/A fallback
   const qa = [];
@@ -93,10 +119,15 @@ function robustParseFlashcards(rawText) {
       q += " " + line;
     }
   }
-  if (q) qa.push({ q, a: a || "" });
-  if (qa.length) return qa;
 
-  // Last fallback
+  if (q) qa.push({ q, a: a || "" });
+
+  if (qa.length) {
+    console.log("🟡 PARSED AS Q/A LIST:", qa);
+    return qa;
+  }
+
+  console.log("🔴 FLASHCARD PARSING FAILED. Returning fallback.");
   return [
     {
       q: "Flashcard parsing failed",
@@ -115,6 +146,8 @@ export default async function handler(req, res) {
   try {
     const { userId, notes, difficulty = "medium", limit = 12 } = req.body;
 
+    console.log("📝 REQUEST RECEIVED:", { userId, notesLength: notes?.length, difficulty, limit });
+
     if (!userId) return res.status(400).json({ error: "Missing userId" });
     if (!notes || !notes.trim())
       return res.status(400).json({ error: "Notes required" });
@@ -123,6 +156,9 @@ export default async function handler(req, res) {
     const diff = ALLOWED.includes(difficulty) ? difficulty : "medium";
     const cardLimit = parseInt(limit) || 12;
 
+    /* ------------------------------
+       GEMINI FLASHCARD GENERATION
+    ------------------------------- */
     const flashPrompt = `
 Turn the following notes into exactly ${cardLimit} flashcards.
 Difficulty: ${diff}
@@ -130,19 +166,16 @@ Difficulty: ${diff}
 Rules:
 - Output MUST be valid JSON:
   [
-    { "q": "question", "a": "answer" },
-    ...
+    { "q": "question", "a": "answer" }
   ]
-- Keep answers short and clear.
-- Avoid markdown.
+- No markdown.
+- No explanation.
+- JSON ONLY.
 
 NOTES:
 ${notes}
 `;
 
-    /* ----------------------------------------------------------
-       CALL GEMINI FOR FLASHCARDS
-    ---------------------------------------------------------- */
     const model = "gemini-2.5-flash";
     const result = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
@@ -151,24 +184,26 @@ ${notes}
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: flashPrompt }] }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 24000,
-          },
+          generationConfig: { temperature: 0.7, maxOutputTokens: 24000 },
         }),
       }
     );
 
     const json = await result.json();
+
+    console.log("🟡 GEMINI RAW RESPONSE OBJECT:", JSON.stringify(json, null, 2).slice(0, 1000));
+
     const rawOut = json?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
     const flashcards = robustParseFlashcards(rawOut);
 
-    /* ----------------------------------------------------------
+    console.log("🟢 FINAL FLASHCARDS:", flashcards);
+
+    /* ------------------------------
        TITLE GENERATION
-    ---------------------------------------------------------- */
+    ------------------------------- */
     const titlePrompt = `
-Extract a short, clean title for these notes. 
+Extract a short, clean title for these notes.
 Return ONLY the title. No quotes.
 
 ${notes.slice(0, 300)}
@@ -190,9 +225,9 @@ ${notes.slice(0, 300)}
       tJson?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ||
       "Untitled Deck";
 
-    /* ----------------------------------------------------------
-       SAVE TO FIRESTORE  (CORRECT COLLECTION)
-    ---------------------------------------------------------- */
+    /* ------------------------------
+       SAVE TO FIRESTORE
+    ------------------------------- */
     const deckRef = await db.collection("flashcardDecks").add({
       userId,
       title,
@@ -202,13 +237,15 @@ ${notes.slice(0, 300)}
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
+    console.log("🟢 SAVED DECK:", deckRef.id);
+
     return res.status(200).json({
       deckId: deckRef.id,
       flashcards,
       title,
     });
   } catch (err) {
-    console.error("Flashcards API error:", err);
+    console.error("🔥 API ERROR:", err);
     return res.status(500).json({
       error: err.message || "Internal error",
     });
