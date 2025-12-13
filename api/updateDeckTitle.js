@@ -3,24 +3,35 @@ import { db } from "./firebaseAdmin.js";
 export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
-      return res.status(405).json({ success: false, message: "Method not allowed" });
-    }
-
-    const { deckId, title } = req.body;
-
-    if (!deckId || !title) {
-      return res.status(400).json({
+      return res.status(405).json({
         success: false,
-        message: "Missing deckId or title",
+        message: "Method not allowed",
       });
     }
 
-    const ref = db.collection("flashcards").doc(deckId);
+    const { deckId, title, type } = req.body;
 
-    await ref.update({
-      title,
-      updatedAt: new Date(),
-    });
+    if (!deckId || !title || !type) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing deckId, title, or type",
+      });
+    }
+
+    // 🔑 Decide collection
+    const collectionName =
+      type === "ai" ? "flashcardDecks" : "flashcards";
+
+    const ref = db.collection(collectionName).doc(deckId);
+
+    // ✅ SAFE write
+    await ref.set(
+      {
+        title: title.trim(),
+        updatedAt: new Date(),
+      },
+      { merge: true }
+    );
 
     return res.status(200).json({
       success: true,
@@ -31,7 +42,7 @@ export default async function handler(req, res) {
     console.error("UPDATE TITLE ERROR:", err);
     return res.status(500).json({
       success: false,
-      message: err.message || "Failed to update title",
+      message: "Failed to update title",
     });
   }
 }
