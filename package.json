@@ -5,7 +5,8 @@
   "type": "module",
   "dependencies": {
     "firebase-admin": "^12.0.0",
-    "formidable": "^3.5.4"
+    "formidable": "^3.5.4",
+    "pdf-parse": "^2.4.5"
   },
   "main": "index.js",
   "scripts": {
