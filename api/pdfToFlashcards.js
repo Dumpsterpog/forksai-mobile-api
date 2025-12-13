@@ -134,14 +134,16 @@ ${notes.slice(0, 300)}
       "Untitled Deck";
 
     /* ---------- SAVE TO FIRESTORE ---------- */
-    const deckRef = await db.collection("flashcardDecks").add({
-      userId,
-      title,
-      difficulty,
-      source: "PDF",
-      flashcards,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+   const deckRef = await db.collection("flashcardDecks").add({
+  userId,
+  title,
+  difficulty,
+  source: "PDF",          // optional
+  sourceType: "pdf",      // ✅ REQUIRED
+  flashcards,
+  createdAt: admin.firestore.FieldValue.serverTimestamp(),
+});
+
 
     return res.status(200).json({
       deckId: deckRef.id,
