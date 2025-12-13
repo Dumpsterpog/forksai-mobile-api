@@ -11,20 +11,19 @@ export default async function handler(req, res) {
 
     const { deckId, title, type } = req.body;
 
-    if (!deckId || !title || !type) {
+    if (!deckId || !title) {
       return res.status(400).json({
         success: false,
-        message: "Missing deckId, title, or type",
+        message: "Missing deckId or title",
       });
     }
 
-    // 🔑 Decide collection
+    // 🔑 Decide collection (default = manual)
     const collectionName =
       type === "ai" ? "flashcardDecks" : "flashcards";
 
     const ref = db.collection(collectionName).doc(deckId);
 
-    // ✅ SAFE write
     await ref.set(
       {
         title: title.trim(),
