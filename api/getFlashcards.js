@@ -1,4 +1,3 @@
-import admin from "firebase-admin";
 import { db } from "./firebaseAdmin.js";
 
 export default async function handler(req, res) {
@@ -9,33 +8,37 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Missing deckId" });
     }
 
-    /* 1️⃣ TRY AI DECKS FIRST */
+    /* 1️⃣ TRY AI DECK */
     let doc = await db.collection("flashcardDecks").doc(deckId).get();
 
     if (doc.exists) {
+      const data = doc.data();
+
       return res.status(200).json({
-        docs: [
-          {
-            id: doc.id,
-            type: "ai",
-            ...doc.data(),
-          },
-        ],
+        deckId: doc.id,
+        type: "ai",
+        title: data.title || "Untitled Deck",
+        cards: (data.flashcards || []).map((c) => ({
+          question: c.q || c.question || "",
+          answer: c.a || c.answer || "",
+        })),
       });
     }
 
-    /* 2️⃣ TRY MANUAL DECKS */
+    /* 2️⃣ TRY MANUAL DECK */
     doc = await db.collection("flashcards").doc(deckId).get();
 
     if (doc.exists) {
+      const data = doc.data();
+
       return res.status(200).json({
-        docs: [
-          {
-            id: doc.id,
-            type: "manual",
-            ...doc.data(),
-          },
-        ],
+        deckId: doc.id,
+        type: "manual",
+        title: data.title || "Untitled Deck",
+        cards: (data.cards || []).map((c) => ({
+          question: c.front || c.question || "",
+          answer: c.back || c.answer || "",
+        })),
       });
     }
 
@@ -45,7 +48,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    console.error("GET FLASHCARDS ERROR:", err);
+    console.error("getFlashcards error:", err);
     return res.status(500).json({
       error: "Failed to fetch deck",
     });
