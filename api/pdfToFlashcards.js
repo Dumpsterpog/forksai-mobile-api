@@ -27,7 +27,15 @@ export default async function handler(req, res) {
       });
     });
 
-    const userId = fields.userId;
+    const userId = Array.isArray(fields.userId)
+  ? fields.userId[0]
+  : typeof fields.userId === "object"
+  ? Object.values(fields.userId)[0]
+  : fields.userId;
+
+  if (typeof userId !== "string") {
+  return res.status(400).json({ error: "Invalid userId format" });
+}
     if (!userId) {
       return res.status(400).json({ error: "Missing userId" });
     }
