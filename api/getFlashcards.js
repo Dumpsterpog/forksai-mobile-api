@@ -24,10 +24,21 @@ export default async function handler(req, res) {
       aiSnapshot = await aiCollection.doc(deckId).get();
 
       if (aiSnapshot.exists) {
+        const data = aiSnapshot.data();
+
+        // 🔥 ADD: dateKey
+        const createdAt = data.createdAt?.toDate?.();
+        const dateKey = createdAt
+          ? `${createdAt.getFullYear()}-${String(
+              createdAt.getMonth() + 1
+            ).padStart(2, "0")}-${String(createdAt.getDate()).padStart(2, "0")}`
+          : null;
+
         results.push({
           id: aiSnapshot.id,
-          ...aiSnapshot.data(),
+          ...data,
           sourceType: "ai",
+          dateKey, // ✅ added
         });
       }
     } else {
@@ -35,10 +46,21 @@ export default async function handler(req, res) {
       aiSnapshot = await aiCollection.where("userId", "==", userId).get();
 
       aiSnapshot.forEach((doc) => {
+        const data = doc.data();
+
+        // 🔥 ADD: dateKey
+        const createdAt = data.createdAt?.toDate?.();
+        const dateKey = createdAt
+          ? `${createdAt.getFullYear()}-${String(
+              createdAt.getMonth() + 1
+            ).padStart(2, "0")}-${String(createdAt.getDate()).padStart(2, "0")}`
+          : null;
+
         results.push({
           id: doc.id,
-          ...doc.data(),
+          ...data,
           sourceType: "ai",
+          dateKey, // ✅ added
         });
       });
     }
@@ -55,7 +77,15 @@ export default async function handler(req, res) {
       if (manualSnapshot.exists) {
         const data = manualSnapshot.data();
 
-        // Fetch signed image URLs
+        // 🔥 ADD: dateKey
+        const createdAt = data.createdAt?.toDate?.();
+        const dateKey = createdAt
+          ? `${createdAt.getFullYear()}-${String(
+              createdAt.getMonth() + 1
+            ).padStart(2, "0")}-${String(createdAt.getDate()).padStart(2, "0")}`
+          : null;
+
+        // Fetch signed image URLs (UNCHANGED)
         if (Array.isArray(data.flashcards)) {
           data.flashcards = await Promise.all(
             data.flashcards.map(async (card) => {
@@ -80,6 +110,7 @@ export default async function handler(req, res) {
           id: manualSnapshot.id,
           ...data,
           sourceType: "manual",
+          dateKey, // ✅ added
         });
       }
     } else {
@@ -90,6 +121,15 @@ export default async function handler(req, res) {
       for (const doc of manualSnapshot.docs) {
         const data = doc.data();
 
+        // 🔥 ADD: dateKey
+        const createdAt = data.createdAt?.toDate?.();
+        const dateKey = createdAt
+          ? `${createdAt.getFullYear()}-${String(
+              createdAt.getMonth() + 1
+            ).padStart(2, "0")}-${String(createdAt.getDate()).padStart(2, "0")}`
+          : null;
+
+        // Fetch signed image URLs (UNCHANGED)
         if (Array.isArray(data.flashcards)) {
           data.flashcards = await Promise.all(
             data.flashcards.map(async (card) => {
@@ -114,6 +154,7 @@ export default async function handler(req, res) {
           id: doc.id,
           ...data,
           sourceType: "manual",
+          dateKey, // ✅ added
         });
       }
     }
