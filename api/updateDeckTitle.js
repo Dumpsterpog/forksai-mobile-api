@@ -11,14 +11,20 @@ export default async function handler(req, res) {
 
     const { deckId, title, type } = req.body;
 
-    if (!deckId || !title) {
+    if (!deckId || !title || !type) {
       return res.status(400).json({
         success: false,
-        message: "Missing deckId or title",
+        message: "Missing deckId, title, or type",
       });
     }
 
-    // 🔑 Decide collection (default = manual)
+    if (type !== "ai" && type !== "manual") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid deck type",
+      });
+    }
+
     const collectionName =
       type === "ai" ? "flashcardDecks" : "flashcards";
 
