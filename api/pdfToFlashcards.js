@@ -27,19 +27,18 @@ export default async function handler(req, res) {
       });
     });
 
+    /* ---------- USER ID ---------- */
     const userId = Array.isArray(fields.userId)
-  ? fields.userId[0]
-  : typeof fields.userId === "object"
-  ? Object.values(fields.userId)[0]
-  : fields.userId;
+      ? fields.userId[0]
+      : typeof fields.userId === "object"
+      ? Object.values(fields.userId)[0]
+      : fields.userId;
 
-  if (typeof userId !== "string") {
-  return res.status(400).json({ error: "Invalid userId format" });
-}
-    if (!userId) {
-      return res.status(400).json({ error: "Missing userId" });
+    if (!userId || typeof userId !== "string") {
+      return res.status(400).json({ error: "Invalid or missing userId" });
     }
 
+    /* ---------- FILE ---------- */
     let file = files.file;
     if (!file) {
       return res.status(400).json({ error: "Missing PDF file" });
@@ -59,10 +58,22 @@ export default async function handler(req, res) {
       });
     }
 
-    // 🔒 HARD LIMIT (prevents serverless crash)
+    // Normalize + hard limit
     const MAX_CHARS = 12000;
-    notes = notes.replace(/\s+/g, " ").slice(0, MAX_CHARS);
+    notes = notes.replace(/\s+/g, " ").trim().slice(0, MAX_CHARS);
 
+    console.log("PDF TEXT LENGTH:", notes.length);
+
+    // ❌ EMPTY / SCANNED PDF GUARD
+    if (notes.length < 200) {
+      return res.status(400).json({
+        error:
+          "We couldn’t extract readable text from this PDF. Please upload a text-based PDF.",
+        flashcards: [],
+      });
+    }
+
+    /* ---------- SETTINGS ---------- */
     const difficulty = fields.difficulty || "medium";
     const limit = Math.min(
       50,
@@ -98,7 +109,16 @@ ${notes}
 
     const data = await result.json();
     const raw =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+      data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    console.log("GEMINI RAW OUTPUT:", raw);
+
+    if (!raw || raw.trim().length === 0) {
+      return res.status(500).json({
+        error: "AI failed to generate flashcards.",
+        flashcards: [],
+      });
+    }
 
     let flashcards;
     try {
@@ -106,15 +126,17 @@ ${notes}
         raw.replace(/```json/g, "").replace(/```/g, "").trim()
       );
     } catch {
-      flashcards = [
-        { q: "Error", a: "AI returned invalid output." },
-      ];
+      return res.status(500).json({
+        error: "AI returned invalid JSON.",
+        flashcards: [],
+      });
     }
 
-    if (!Array.isArray(flashcards)) {
-      flashcards = [
-        { q: "Error", a: "Invalid flashcard format." },
-      ];
+    if (!Array.isArray(flashcards) || flashcards.length === 0) {
+      return res.status(500).json({
+        error: "AI returned no flashcards.",
+        flashcards: [],
+      });
     }
 
     /* ---------- GENERATE TITLE ---------- */
@@ -142,16 +164,15 @@ ${notes.slice(0, 300)}
       "Untitled Deck";
 
     /* ---------- SAVE TO FIRESTORE ---------- */
-   const deckRef = await db.collection("flashcardDecks").add({
-  userId,
-  title,
-  difficulty,
-  source: "PDF",          // optional
-  sourceType: "pdf",      // ✅ REQUIRED
-  flashcards,
-  createdAt: admin.firestore.FieldValue.serverTimestamp(),
-});
-
+    const deckRef = await db.collection("flashcardDecks").add({
+      userId,
+      title,
+      difficulty,
+      source: "PDF",
+      sourceType: "pdf",
+      flashcards,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
 
     return res.status(200).json({
       deckId: deckRef.id,
