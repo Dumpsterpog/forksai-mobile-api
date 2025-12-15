@@ -58,13 +58,11 @@ export default async function handler(req, res) {
       });
     }
 
-    // Normalize + hard limit
     const MAX_CHARS = 12000;
     notes = notes.replace(/\s+/g, " ").trim().slice(0, MAX_CHARS);
 
     console.log("PDF TEXT LENGTH:", notes.length);
 
-    // ❌ EMPTY / SCANNED PDF GUARD
     if (notes.length < 200) {
       return res.status(400).json({
         error:
@@ -94,7 +92,8 @@ Text:
 ${notes}
 `;
 
-    const model = "gemini-2.5-flash";
+    // ✅ STABLE MODEL
+    const model = "gemini-1.5-flash";
 
     const result = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
@@ -108,14 +107,44 @@ ${notes}
     );
 
     const data = await result.json();
-    const raw =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    console.log("GEMINI FULL RESPONSE:", JSON.stringify(data));
+
+    // ❌ Gemini API error
+    if (data.error) {
+      return res.status(500).json({
+        error: data.error.message || "Gemini API error",
+        flashcards: [],
+      });
+    }
+
+    if (!Array.isArray(data.candidates) || data.candidates.length === 0) {
+      return res.status(500).json({
+        error: "Gemini returned no candidates.",
+        flashcards: [],
+      });
+    }
+
+    const parts = data.candidates[0]?.content?.parts;
+
+    if (!Array.isArray(parts)) {
+      return res.status(500).json({
+        error: "Gemini returned no content parts.",
+        flashcards: [],
+      });
+    }
+
+    const raw = parts
+      .map((p) => p.text)
+      .filter(Boolean)
+      .join("\n")
+      .trim();
 
     console.log("GEMINI RAW OUTPUT:", raw);
 
-    if (!raw || raw.trim().length === 0) {
+    if (!raw) {
       return res.status(500).json({
-        error: "AI failed to generate flashcards.",
+        error: "Gemini returned empty output.",
         flashcards: [],
       });
     }
