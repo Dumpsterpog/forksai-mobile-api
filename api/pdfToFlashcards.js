@@ -92,11 +92,11 @@ Text:
 ${notes}
 `;
 
-    // ✅ STABLE MODEL
-    const model = "gemini-1.5-flash";
+    // ✅ CORRECT MODEL + API
+    const model = "gemini-2.0-flash";
 
     const result = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -107,10 +107,8 @@ ${notes}
     );
 
     const data = await result.json();
-
     console.log("GEMINI FULL RESPONSE:", JSON.stringify(data));
 
-    // ❌ Gemini API error
     if (data.error) {
       return res.status(500).json({
         error: data.error.message || "Gemini API error",
@@ -177,7 +175,7 @@ ${notes.slice(0, 300)}
 `;
 
     const tRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
